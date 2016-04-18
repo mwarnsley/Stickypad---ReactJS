@@ -19678,12 +19678,29 @@ var AppDispatcher = require('../dispatcher/AppDispatcher');
 var AppConstants = require('../constants/AppConstants');
 
 var AppActions = {
-
+	addNote: function(note){
+		AppDispatcher.handleViewAction({
+			actionType: AppConstants.ADD_NOTE,
+			note: note
+		});
+	},
+	receiveNotes: function(notes){
+		AppDispatcher.handleViewAction({
+			actionType: AppConstants.RECEIVE_NOTES,
+			notes: notes
+		});
+	},
+	removeNote: function(noteId){
+		AppDispatcher.handleViewAction({
+			actionType: AppConstants.REMOVE_NOTE,
+			noteId: noteId
+		});
+	}
 }
 
 module.exports = AppActions;
 
-},{"../constants/AppConstants":167,"../dispatcher/AppDispatcher":168}],165:[function(require,module,exports){
+},{"../constants/AppConstants":169,"../dispatcher/AppDispatcher":170}],165:[function(require,module,exports){
 var React = require('react');
 var AppActions = require('../actions/AppActions');
 var AppStore = require('../stores/AppStore');
@@ -19721,11 +19738,12 @@ var AddNoteForm = React.createClass({displayName: "AddNoteForm",
 
 module.exports = AddNoteForm;
 
-},{"../actions/AppActions":164,"../stores/AppStore":170,"react":163}],166:[function(require,module,exports){
+},{"../actions/AppActions":164,"../stores/AppStore":172,"react":163}],166:[function(require,module,exports){
 var React = require('react');
 var AppActions = require('../actions/AppActions');
 var AppStore = require('../stores/AppStore');
 var AddNoteForm = require('./AddNoteForm.js');
+var NoteList = require('./NoteList.js');
 
 function getAppState(){
 	return {
@@ -19747,7 +19765,7 @@ var App = React.createClass({displayName: "App",
 	},
 
 	render: function(){
-		console.log(this.state.notes);
+		console.log(this.state);
 		return(
 			React.createElement("div", null, 
 				React.createElement("div", {className: "off-canvas-wrapper"}, 
@@ -19759,7 +19777,7 @@ var App = React.createClass({displayName: "App",
 							)
 						), 
 						React.createElement("div", {className: "off-canvas-content", "data-off-canvas-content": true}, 
-						"// NOTELIST"
+							React.createElement(NoteList, {notes: this.state.notes})
 						)
 					)
 				)
@@ -19775,12 +19793,61 @@ var App = React.createClass({displayName: "App",
 
 module.exports = App;
 
-},{"../actions/AppActions":164,"../stores/AppStore":170,"./AddNoteForm.js":165,"react":163}],167:[function(require,module,exports){
+},{"../actions/AppActions":164,"../stores/AppStore":172,"./AddNoteForm.js":165,"./NoteList.js":168,"react":163}],167:[function(require,module,exports){
+var React = require('react');
+var AppActions = require('../actions/AppActions');
+var AppStore = require('../stores/AppStore');
+
+var Note = React.createClass({displayName: "Note",
+	render: function(){
+		return(
+			React.createElement("div", {className: "column"}, 
+				React.createElement("div", {onDoubleClick: this.removeNote.bind(this, this.props.note._id), className: "note"}, React.createElement("p", null, this.props.note.text))
+			)
+		)
+	},
+
+	removeNote: function(i, j){
+		AppActions.removeNote(i.$oid);
+	}
+
+});
+
+module.exports = Note;
+
+},{"../actions/AppActions":164,"../stores/AppStore":172,"react":163}],168:[function(require,module,exports){
+var React = require('react');
+var AppActions = require('../actions/AppActions');
+var AppStore = require('../stores/AppStore');
+var Note = require('./Note.js');
+
+var NoteList = React.createClass({displayName: "NoteList",
+	render: function(){
+		return(
+			React.createElement("div", {className: "row small-up-2 medium-up-3 large-up-4"}, 
+				
+					this.props.notes.map(function(note, i){
+						return (
+							React.createElement(Note, {note: note, key: i})
+						)
+					})
+				
+			)
+		)
+	}
+
+});
+
+module.exports = NoteList;
+
+},{"../actions/AppActions":164,"../stores/AppStore":172,"./Note.js":167,"react":163}],169:[function(require,module,exports){
 module.exports = {
-	ADD_NOTE: 'ADD_NOTE'
+	ADD_NOTE: 'ADD_NOTE',
+	RECEIVE_NOTES: 'RECEIVE_NOTES',
+	REMOVE_NOTE: 'REMOVE_NOTE'
 }
 
-},{}],168:[function(require,module,exports){
+},{}],170:[function(require,module,exports){
 var Dispatcher = require('flux').Dispatcher;
 var assign = require('object-assign');
 
@@ -19796,7 +19863,7 @@ var AppDispatcher = assign(new Dispatcher(),{
 
 module.exports = AppDispatcher;
 
-},{"flux":29,"object-assign":32}],169:[function(require,module,exports){
+},{"flux":29,"object-assign":32}],171:[function(require,module,exports){
 var App = require('./components/App');
 var React = require('react');
 var ReactDOM = require('react-dom');
@@ -19808,7 +19875,7 @@ ReactDOM.render(
 	document.getElementById('app')
 );
 
-},{"./components/App":166,"./utils/appAPI.js":172,"react":163,"react-dom":34}],170:[function(require,module,exports){
+},{"./components/App":166,"./utils/appAPI.js":174,"react":163,"react-dom":34}],172:[function(require,module,exports){
 var AppDispatcher = require('../dispatcher/AppDispatcher');
 var AppConstants = require('../constants/AppConstants');
 var EventEmitter = require('events').EventEmitter;
@@ -19819,21 +19886,129 @@ var CHANGE_EVENT = 'change';
 
 var _notes = [];
 
+var AppStore = assign({}, EventEmitter.prototype, {
+	addNote: function(note){
+		_notes.push(note);
+	},
+	getNotes: function(){
+		return _notes;
+	},
+	setNotes: function(notes){
+		_notes = notes;
+	},
+	removeNote: function(noteId){
+		var index = _notes.findIndex(x => x._id.$oid === noteId);
+		_notes.splice(index, 1);
+	},
+	emitChange: function(){
+		this.emit(CHANGE_EVENT);
+	},
+	addChangeListener: function(callback){
+		this.on('change', callback);
+	},
+	removeChangeListener: function(callback){
+		this.removeListener('change', callback);
+	}
+});
+
+AppDispatcher.register(function(payload){
+	var action = payload.action;
+
+	switch(action.actionType){
+		case AppConstants.ADD_NOTE:
+			console.log('Adding Note...');
+
+			// Store Save
+			AppStore.addNote(action.note);
+
+			// API Save
+			AppAPI.addNote(action.note);
+
+			// Emit Change
+			AppStore.emit(CHANGE_EVENT);
+			break;
+
+		case AppConstants.RECEIVE_NOTES:
+			console.log('Receiving Notes...');
+
+			// Store Save
+			AppStore.setNotes(action.notes);
+
+			// Emit Change
+			AppStore.emit(CHANGE_EVENT);
+			break;
+
+		case AppConstants.REMOVE_NOTE:
+			console.log('Removing Note...');
+
+			// Store Remove
+			AppStore.removeNote(action.noteId);
+
+			// API Remove
+			AppAPI.removeNote(action.noteId);
+
+			// Emit Change
+			AppStore.emit(CHANGE_EVENT);
+			break;
+	}
+
+	return true;
+});
 
 module.exports = AppStore;
 
-},{"../constants/AppConstants":167,"../dispatcher/AppDispatcher":168,"../utils/AppAPI.js":171,"events":1,"object-assign":32}],171:[function(require,module,exports){
+},{"../constants/AppConstants":169,"../dispatcher/AppDispatcher":170,"../utils/AppAPI.js":173,"events":1,"object-assign":32}],173:[function(require,module,exports){
 var AppActions = require('../actions/AppActions');
 
 module.exports = {
-	
+	addNote: function(note){
+		$.ajax({
+			url: "https://api.mongolab.com/api/1/databases/mystickypad/collections/notes?apikey={{THIS IS MY API KEY}}",
+			data: JSON.stringify(note),
+			type: "POST",
+			contentType: "application/json"
+		});
+	},
+	getNotes: function(){
+		$.ajax({
+			url: "https://api.mongolab.com/api/1/databases/mystickypad/collections/notes?apikey={{THIS IS MY API KEY}}",
+			dataType: "json",
+			cache: false,
+			success: function(data){
+				AppActions.receiveNotes(data);
+			}.bind(this),
+			error: function(xhr, status, err){
+				console.log(err);
+			}.bind(this)
+		});
+	}
 }
 
-},{"../actions/AppActions":164}],172:[function(require,module,exports){
+},{"../actions/AppActions":164}],174:[function(require,module,exports){
 var AppActions = require('../actions/AppActions');
 
 module.exports = {
-	
+	addNote: function(note){
+		$.ajax({
+			url: "https://api.mongolab.com/api/1/databases/mystickypad/collections/notes?apikey={{THIS IS MY API KEY}}",
+			data: JSON.stringify(note),
+			type: "POST",
+			contentType: "application/json"
+		});
+	},
+	getNotes: function(){
+		$.ajax({
+			url: "https://api.mongolab.com/api/1/databases/mystickypad/collections/notes?apikey={{THIS IS MY API KEY}}",
+			dataType: "json",
+			cache: false,
+			success: function(data){
+				AppActions.receiveNotes(data);
+			}.bind(this),
+			error: function(xhr, status, err){
+				console.log(err);
+			}.bind(this)
+		});
+	}
 }
 
-},{"../actions/AppActions":164}]},{},[169]);
+},{"../actions/AppActions":164}]},{},[171]);
